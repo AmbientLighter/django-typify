@@ -38,7 +38,10 @@ def extract_reverse_relations(tree: ast.AST) -> List[Tuple[str, str, str]]:
             elif isinstance(func, ast.Subscript):
                 sub_func = func.value
                 if isinstance(sub_func, ast.Attribute):
-                    if isinstance(sub_func.value, ast.Name) and sub_func.value.id == "models":
+                    if (
+                        isinstance(sub_func.value, ast.Name)
+                        and sub_func.value.id == "models"
+                    ):
                         field_type = sub_func.attr
 
             if field_type not in {"ForeignKey", "OneToOneField", "ManyToManyField"}:
@@ -86,7 +89,9 @@ def create_annotation(name: str, model: str) -> str:
     return f"    {name}: models.Manager['{model}']"
 
 
-def annotate_model_source(source: str, annotations: Dict[str, List[Tuple[str, str]]]) -> str:
+def annotate_model_source(
+    source: str, annotations: Dict[str, List[Tuple[str, str]]]
+) -> str:
     tree = ast.parse(source)
     lines = source.splitlines()
     inserts = {}
@@ -95,7 +100,9 @@ def annotate_model_source(source: str, annotations: Dict[str, List[Tuple[str, st
         if isinstance(class_node, ast.ClassDef) and class_node.name in annotations:
             insert_line = class_node.lineno
 
-            while insert_line < len(lines) and not lines[insert_line - 1].strip().endswith(":"):
+            while insert_line < len(lines) and not lines[
+                insert_line - 1
+            ].strip().endswith(":"):
                 insert_line += 1
 
             if (
@@ -103,10 +110,17 @@ def annotate_model_source(source: str, annotations: Dict[str, List[Tuple[str, st
                 and isinstance(class_node.body[0], ast.Expr)
                 and isinstance(class_node.body[0].value, ast.Str)
             ):
-                insert_line = class_node.body[0].lineno + 1
+                docstring_node = class_node.body[0]
+                insert_line = (
+                    docstring_node.lineno + docstring_node.value.s.count("\n") + 1
+                )
 
-            insert_lines = [create_annotation(name, model) for name, model in annotations[class_node.name]]
+            insert_lines = [
+                create_annotation(name, model)
+                for name, model in annotations[class_node.name]
+            ]
             inserts.setdefault(insert_line, []).extend(insert_lines)
+            inserts.setdefault(insert_line, []).append("")
 
     output = []
     for i, line in enumerate(lines, 1):
