@@ -44,41 +44,58 @@ def process_factory_file(path: str):
 
     tree = ast.parse(source)
     lines = source.splitlines()
-    updated_lines = []
+    updated_lines = lines[:]
+    needs_import = False
 
     for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            base_classes = [
-                base.id for base in node.bases if isinstance(base, ast.Name)
-            ]
-            if "DjangoModelFactory" in base_classes:
-                for stmt in node.body:
-                    if isinstance(stmt, ast.ClassDef) and stmt.name == "Meta":
-                        for meta_stmt in stmt.body:
-                            if (
-                                isinstance(meta_stmt, ast.Assign)
-                                and len(meta_stmt.targets) == 1
-                                and isinstance(meta_stmt.targets[0], ast.Name)
-                                and meta_stmt.targets[0].id == "model"
-                            ):
-                                model_name = meta_stmt.value.attr
-                                updated_lines.append(
-                                    f"class {node.name}(factory.django.DjangoModelFactory, metaclass=BaseMetaFactory[models.{model_name}]):"
-                                )
-                                break
-                        else:
-                            updated_lines.append(lines[node.lineno - 1])
-                    else:
-                        updated_lines.append(lines[node.lineno - 1])
-            else:
-                updated_lines.append(lines[node.lineno - 1])
-        else:
-            updated_lines.append(lines[node.lineno - 1])
+        if not isinstance(node, ast.ClassDef):
+            continue
+        
+        # Check if it's a factory class by looking at the text
+        class_text = "\n".join(lines[node.lineno-1:node.end_lineno])
+        if "DjangoModelFactory" not in class_text:
+            continue
 
-    updated_source = "\n".join(updated_lines)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(updated_source)
-    print(f"✅ Updated {path}")
+        # Skip if metaclass is already defined
+        if any(k.arg == 'metaclass' for k in node.keywords):
+            continue
+
+        # Look for Meta class and model assignment
+        for stmt in node.body:
+            if isinstance(stmt, ast.ClassDef) and stmt.name == "Meta":
+                for meta_stmt in stmt.body:
+                    if (
+                        isinstance(meta_stmt, ast.Assign)
+                        and len(meta_stmt.targets) == 1
+                        and isinstance(meta_stmt.targets[0], ast.Name)
+                        and meta_stmt.targets[0].id == "model"
+                    ):
+                        # Get the full model path as text from the original source
+                        model_line = lines[meta_stmt.lineno - 1]
+                        model_value = model_line.split("=")[1].strip()
+                        
+                        # Update the factory class definition line
+                        class_def_line = node.lineno - 1
+                        updated_lines[class_def_line] = (
+                            f"class {node.name}(factory.django.DjangoModelFactory, "
+                            f"metaclass=BaseMetaFactory[{model_value}]):"
+                        )
+                        needs_import = True
+                        break
+                break
+
+    # Add import if changes were made
+    if needs_import:
+        updated_lines.insert(0, "from waldur_core.core.tests.types import BaseMetaFactory")
+
+    # Check if any changes were made
+    if updated_lines != lines:
+        updated_source = "\n".join(updated_lines)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(updated_source)
+        print(f"✅ Updated {path}")
+    else:
+        print(f"— No changes in {path}")
 
 
 def main():
