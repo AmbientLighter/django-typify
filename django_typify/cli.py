@@ -13,7 +13,7 @@ def find_model_files(root: str):
 def find_factory_files(root: str):
     for dirpath, _, filenames in os.walk(root):
         for f in filenames:
-            if f.endswith("_factory.py") or f.endswith("_factories.py"):
+            if f.endswith("factories.py"):
                 yield os.path.join(dirpath, f)
 
 
@@ -48,7 +48,9 @@ def process_factory_file(path: str):
 
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
-            base_classes = [base.id for base in node.bases if isinstance(base, ast.Name)]
+            base_classes = [
+                base.id for base in node.bases if isinstance(base, ast.Name)
+            ]
             if "DjangoModelFactory" in base_classes:
                 for stmt in node.body:
                     if isinstance(stmt, ast.ClassDef) and stmt.name == "Meta":
@@ -93,7 +95,8 @@ def main():
     annotate_parser.add_argument("path", help="Path to the root of the Django project")
 
     annotate_factories_parser = subparsers.add_parser(
-        "annotate-factories", help="Annotate Django test factories with type annotations."
+        "annotate-factories",
+        help="Annotate Django test factories with type annotations.",
     )
     annotate_factories_parser.add_argument(
         "path", help="Path to the root of the Django project"
