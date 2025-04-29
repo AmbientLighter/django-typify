@@ -1,5 +1,14 @@
 import ast
+import os
+
 from typing import Dict, List, Tuple
+
+
+def add_models_subcommand(subparsers):
+    annotate_parser = subparsers.add_parser(
+        "annotate-models", help="Annotate Django models with reverse relations."
+    )
+    annotate_parser.add_argument("path", help="Path to the root of the Django project")
 
 
 def get_model_classes_from_ast(tree: ast.AST) -> Dict[str, ast.ClassDef]:
@@ -129,3 +138,31 @@ def annotate_model_source(
             output.extend(inserts[i])
 
     return "\n".join(output)
+
+
+def find_model_files(root: str):
+    for dirpath, _, filenames in os.walk(root):
+        for f in filenames:
+            if f == "models.py":
+                yield os.path.join(dirpath, f)
+
+
+def process_models_file(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        source = f.read()
+
+    tree = ast.parse(source)
+    reverse_relations = extract_reverse_relations(tree)
+
+    annotations = {}
+    for to_model, related_name, from_model in reverse_relations:
+        annotations.setdefault(to_model, []).append((related_name, from_model))
+
+    if not annotations:
+        print(f"— No changes in {path}")
+        return
+
+    updated = annotate_model_source(source, annotations)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(updated)
+    print(f"✅ Updated {path}")

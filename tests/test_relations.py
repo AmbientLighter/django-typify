@@ -1,5 +1,5 @@
 import ast
-from django_typify.core import extract_reverse_relations
+from django_typify.models import extract_reverse_relations
 
 
 def test_extract_reverse_relation():
